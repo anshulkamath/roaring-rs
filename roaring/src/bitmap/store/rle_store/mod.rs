@@ -33,6 +33,55 @@ impl RunStore {
             Err(y) => Err(i32::try_from(y).unwrap() - 1)
         }
     }
+
+    pub fn insert(&mut self, pos: u16) -> bool {
+        let Err(index) = self.interleaved_binary_search(pos) else {
+            return false; // already exists
+        };
+
+        if index >= 0 { // possible match
+            let index = index as usize;
+            let interval = self.vec[index];
+
+            let offset = pos.checked_sub(interval.value);
+            let len = interval.length;
+            if offset <= Some(len) {
+                // already exists
+                return false;
+            } else if offset == Some(len + 1) {
+                // may need to fuse two intervals
+                let next_interval = self.vec.get(index + 1);
+                let fused = interval.try_fuse(next_interval);
+                if let Some(fused_interval) = fused {
+                    self.vec.remove(index + 1);
+                    self.vec[index] = fused_interval;
+                    return true;
+                } else {
+                    self.vec[index].length += 1;
+                    return true;
+                }
+            } else if let Some(next_interval) = self.vec.get_mut(index + 1) {
+                // may need to fuse into next interval
+                if next_interval.value == pos + 1 {
+                    next_interval.value = pos;
+                    next_interval.length += 1;
+                    return true;
+                }
+            }
+        }
+
+        if index == -1 {
+            // may need to extend the first run
+            let fused = Interval::from(pos).try_fuse(self.vec.get(0));
+            if let Some(fused_interval) = fused {
+                self.vec[0] = fused_interval;
+                return true;
+            }
+        }
+
+        self.vec.insert(usize::try_from(index + 1).unwrap(), Interval::from(pos));
+        return true;
+    }
 }
 
 #[derive(Debug)]
@@ -128,5 +177,42 @@ mod tests {
         assert_eq!(store.find_run(21), Err(1));
         assert_eq!(store.find_run(35), Ok(2));
         assert_eq!(store.find_run(51), Err(3));
+    }
+
+    #[test]
+    fn test_insert() {
+        let mut store = get_mock_run_store();
+
+        // already exists
+        assert!(!store.insert(5));
+        assert!(!store.insert(7));
+        assert!(!store.insert(10));
+
+        // does not exist, create and append to new run at beginning
+        assert!(store.insert(0));
+        assert!(store.insert(1));
+        assert!(store.insert(2));
+        assert_eq!(store.vec[0], Interval::from((0, 2)));
+        assert_eq!(store.vec.len(), 5);
+
+        // does not exist, create and appent to new run in middle
+        assert!(store.insert(22));
+        assert!(store.insert(23));
+        assert_eq!(store.vec.len(), 6);
+
+        // does not exist, fusing two existing intervals
+        assert!(store.insert(36));
+        assert_eq!(store.vec.last(), Some(Interval::from((25, 50)).borrow()));
+        assert_eq!(store.vec.len(), 5);
+
+        // does not exist, append to current interval (relative to index 1)
+        assert!(store.insert(11));
+        assert_eq!(store.vec[1], Interval::from((5, 11)));
+        assert_eq!(store.vec.len(), 5);
+
+        // does not exist, prepend to next interval (relative to index 0)
+        assert!(store.insert(4));
+        assert_eq!(store.vec[1], Interval::from((4, 11)));
+        assert_eq!(store.vec.len(), 5);
     }
 }

@@ -42,6 +42,34 @@ impl Interval {
             Ordering::Less
         }
     }
+
+    /// Tries to fuse two intervals together that are separated by a single element.
+    /// 
+    /// # Example
+    /// ```ignore
+    /// let interval_1 = Interval::from((3, 5)); // [3, 4, 5]
+    /// let interval_2 = Interval::from((7, 10)); // [7, 8, 9, 10]
+    /// let interval_3 = Interval::from((8, 10)); // [8, 9, 10]
+    ///
+    /// assert_eq!(interval_1.try_fuse(&interval_2), Some(Interval::from((3, 10))));
+    /// assert_eq!(interval_1.try_fuse(&interval_3), None);
+    /// ```
+    pub fn try_fuse(&self, other: Option<&Interval>) -> Option<Interval> {
+        let Some(other) = other else {
+            return None
+        };
+
+        let (this_start, this_end) = self.get_pair();
+        let (other_start, other_end) = other.get_pair();
+
+        if other_start.checked_sub(this_end) == Some(2) {
+            return Some(Interval::from((this_start, other_end)))
+        } else if this_start.checked_sub(other_end) == Some(2) {
+            return Some(Interval::from((other_start, this_end)))
+        }
+
+        None
+    }
 }
 
 impl From<u16> for Interval {
@@ -68,5 +96,17 @@ mod tests {
         assert_eq!(interval.compare_to_index(15), std::cmp::Ordering::Equal);
         assert_eq!(interval.compare_to_index(20), std::cmp::Ordering::Equal);
         assert_eq!(interval.compare_to_index(21), std::cmp::Ordering::Less);
+    }
+
+    #[test]
+    fn test_try_fuse() {
+        let interval_1 = Interval::from((3, 5)); // [3, 4, 5]
+        let interval_2 = Interval::from((7, 10)); // [7, 8, 9, 10]
+        let interval_3 = Interval::from((8, 10)); // [8, 9, 10]
+
+        assert_eq!(interval_1.try_fuse(Some(&interval_2)), Some(Interval::from((3, 10))));
+        assert_eq!(interval_2.try_fuse(Some(&interval_1)), Some(Interval::from((3, 10))));
+        assert_eq!(interval_1.try_fuse(Some(&interval_3)), None);
+        assert_eq!(interval_3.try_fuse(Some(&interval_1)), None);
     }
 }
