@@ -79,6 +79,7 @@ impl From<u16> for Interval {
 }
 
 impl From<(u16, u16)> for Interval {
+    #[inline]
     fn from(value: (u16, u16)) -> Self {
         Interval::new(value.0, value.1 - value.0)
     }

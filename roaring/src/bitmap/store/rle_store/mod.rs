@@ -1,6 +1,7 @@
 mod interval;
 
 use interval::Interval;
+use core::borrow::BorrowMut;
 use std::cmp::Ordering;
 
 #[derive(Clone, Debug)]
@@ -81,6 +82,37 @@ impl RunStore {
 
         self.vec.insert(usize::try_from(index + 1).unwrap(), Interval::from(pos));
         return true;
+    }
+
+    pub fn remove(&mut self, pos: u16) -> bool {
+        let Err(index) = self.interleaved_binary_search(pos) else {
+            // already exists
+            let interval = self.vec[0].borrow_mut();
+            interval.value += 1;
+            interval.length -= 1;
+            return true;
+        };
+
+        if index >= 0 { // possible match
+            let index = index as usize;
+            let interval = self.vec[index].borrow_mut();
+            let offset = pos - interval.value;
+            let len = interval.length;
+            if offset < len {
+                // break interval into two
+                interval.length = offset - 1;
+                let new_interval = Interval::new(pos + 1, len - offset - 1);
+                self.vec.insert(index + 1, new_interval);
+                return true;
+            } else if offset == len {
+                // remove last element of interval
+                interval.length -= 1;
+                return true;
+            }
+        }
+
+        // no match
+        return false;
     }
 }
 
@@ -214,5 +246,22 @@ mod tests {
         assert!(store.insert(4));
         assert_eq!(store.vec[1], Interval::from((4, 11)));
         assert_eq!(store.vec.len(), 5);
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut store = get_mock_run_store();
+
+        assert!(!store.remove(0));
+        assert!(store.remove(5));
+        assert_eq!(store.vec[0], Interval::from((6, 10)));
+
+        assert!(store.remove(10));
+        assert_eq!(store.vec[0], Interval::from((6, 9)));
+
+        assert!(store.remove(17));
+        assert_eq!(store.vec.len(), 5);
+        assert_eq!(store.vec[1], Interval::from((15, 16)));
+        assert_eq!(store.vec[2], Interval::from((18, 20)));
     }
 }
