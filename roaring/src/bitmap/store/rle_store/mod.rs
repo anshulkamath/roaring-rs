@@ -1,10 +1,12 @@
 mod interval;
+mod ops;
+mod visitor;
 
 use interval::Interval;
 use core::borrow::BorrowMut;
 use std::cmp::Ordering;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RunStore {
     vec: Vec<Interval>,
 }
@@ -21,6 +23,14 @@ impl RunStore {
         match self.vec.binary_search_by_key(&ikey, |interval| interval.value) {
             Ok(x) => Ok(i32::try_from(x).unwrap()),
             Err(y) => Err(i32::try_from(y).unwrap() - 1),
+        }
+    }
+
+    #[inline]
+    fn is_full(&self) -> bool {
+        match self.vec.first() {
+            Some(ival) => ival.value == 0 && ival.length == 0xFFFF,
+            None => false,
         }
     }
 

@@ -17,6 +17,10 @@ impl Interval {
         return (self.value, self.value + self.length)
     }
 
+    pub fn get_end(&self) -> u16 {
+        self.value + self.length
+    }
+
     /// Compares the given `key` to the interval. Note that the comparison is
     /// relative to the interval, so `Less` implies that our interval is below
     /// the key (i.e., the key is higher than the bounds of the interval).
