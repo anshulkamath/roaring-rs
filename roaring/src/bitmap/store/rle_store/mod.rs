@@ -22,6 +22,17 @@ impl RunStore {
             Err(y) => Err(i32::try_from(y).unwrap() - 1),
         }
     }
+
+    /// Returns the index of the run which contains `ikey`.
+    /// If no such index is found, returns an Err() whose value is the index at
+    /// which the key can be inserted.
+    #[inline]
+    fn find_run(&self, ikey: u16) -> Result<i32, i32> {
+        match self.vec.binary_search_by(|interval| interval.compare_to_index(ikey)) {
+            Ok(x) => Ok(i32::try_from(x).unwrap()),
+            Err(y) => Err(i32::try_from(y).unwrap() - 1)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -102,4 +113,20 @@ mod tests {
         assert_eq!(store.interleaved_binary_search(51), Err(3));
     }
 
+    #[test]
+    fn find_run() {
+        let store = get_mock_run_store();
+
+        assert!(store.find_run(0).is_err());
+        assert_eq!(store.find_run(3), Err(-1));
+        assert_eq!(store.find_run(5), Ok(0));
+        assert_eq!(store.find_run(7), Ok(0));
+        assert_eq!(store.find_run(10), Ok(0));
+        assert_eq!(store.find_run(13), Err(0));
+        assert_eq!(store.find_run(15), Ok(1));
+        assert_eq!(store.find_run(20), Ok(1));
+        assert_eq!(store.find_run(21), Err(1));
+        assert_eq!(store.find_run(35), Ok(2));
+        assert_eq!(store.find_run(51), Err(3));
+    }
 }
