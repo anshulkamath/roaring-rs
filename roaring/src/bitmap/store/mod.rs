@@ -1,5 +1,6 @@
 mod array_store;
 mod bitmap_store;
+mod rle_store;
 
 use alloc::vec;
 use core::mem;
