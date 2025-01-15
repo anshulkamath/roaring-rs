@@ -13,6 +13,15 @@ impl RunStore {
         RunStore { vec: vec![] }
     }
 
+    /// Searches for a container that starts with the given `ikey`. If no such
+    /// container exists, returns an Error with the index of the container that
+    /// *would* contain `ikey`.
+    fn interleaved_binary_search(&self, ikey: u16) -> Result<i32, i32> {
+        match self.vec.binary_search_by_key(&ikey, |interval| interval.value) {
+            Ok(x) => Ok(i32::try_from(x).unwrap()),
+            Err(y) => Err(i32::try_from(y).unwrap() - 1),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -73,4 +82,24 @@ mod tests {
         .unwrap()
         .clone()
     }
+
+    #[test]
+    fn test_interleaved_binary_search() {
+        let store = get_mock_run_store();
+
+        // found
+        assert_eq!(store.interleaved_binary_search(5), Ok(0));
+        assert_eq!(store.interleaved_binary_search(15), Ok(1));
+        assert_eq!(store.interleaved_binary_search(25), Ok(2));
+        assert_eq!(store.interleaved_binary_search(37), Ok(3));
+    
+        // not found
+        assert_eq!(store.interleaved_binary_search(3), Err(-1));
+        assert_eq!(store.interleaved_binary_search(8), Err(0));
+        assert_eq!(store.interleaved_binary_search(10), Err(0));
+        assert_eq!(store.interleaved_binary_search(11), Err(0));
+        assert_eq!(store.interleaved_binary_search(23), Err(1));
+        assert_eq!(store.interleaved_binary_search(51), Err(3));
+    }
+
 }
