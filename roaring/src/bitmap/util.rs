@@ -14,6 +14,17 @@ pub fn join(high: u16, low: u16) -> u32 {
     (u32::from(high) << 16) + u32::from(low)
 }
 
+pub fn minmax<T>(v1: T, v2: T) -> (T, T)
+where
+    T: Ord,
+{
+    if v1 <= v2 {
+        (v1, v2)
+    } else {
+        (v2, v1)
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ConvertRangeError {
     Empty,

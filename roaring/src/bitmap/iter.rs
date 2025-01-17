@@ -1,5 +1,6 @@
 use alloc::vec;
 use core::iter::FusedIterator;
+use core::iter::Peekable;
 use core::ops::RangeBounds;
 use core::slice;
 
@@ -535,6 +536,55 @@ impl DoubleEndedIterator for IntoIter {
             n -= len;
         }
         and_then_or_clear(&mut self.front, |it| it.nth_back(n))
+    }
+}
+
+/// Implements an iterator that holds two comparable types and, upon iteration,
+/// yields the smaller element from the stored iterators' positions. Iteration
+/// continue until both iterators have been exhausted.
+pub struct BivariateOrderedIterator<'a, T>
+where
+    T: Ord + Clone,
+{
+    iter1: Peekable<slice::Iter<'a, T>>,
+    iter2: Peekable<slice::Iter<'a, T>>,
+}
+
+impl<'a, T> BivariateOrderedIterator<'a, T>
+where
+    T: Ord + Clone,
+{
+    pub fn new(
+        iter1: slice::Iter<'a, T>,
+        iter2: slice::Iter<'a, T>,
+    ) -> BivariateOrderedIterator<'a, T> {
+        BivariateOrderedIterator { iter1: iter1.peekable(), iter2: iter2.peekable() }
+    }
+}
+
+impl<'a, T> Iterator for BivariateOrderedIterator<'a, T>
+where
+    T: Ord + Clone,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let interval1 = self.iter1.peek();
+        let interval2 = self.iter2.peek();
+
+        if interval1.is_some() && interval2.is_some() {
+            if interval1.unwrap() <= interval2.unwrap() {
+                return Some(self.iter1.next().unwrap().clone());
+            } else {
+                return Some(self.iter2.next().unwrap().clone());
+            }
+        } else if interval1.is_some() {
+            return Some(self.iter1.next().unwrap().clone());
+        } else if interval2.is_some() {
+            return Some(self.iter2.next().unwrap().clone());
+        } else {
+            None
+        }
     }
 }
 

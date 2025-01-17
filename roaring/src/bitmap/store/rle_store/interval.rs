@@ -1,8 +1,9 @@
+use core::borrow::BorrowMut;
 use std::cmp::Ordering;
 
 /// A run-length pair that represents the intervals in the range [v, v+l].
 /// For example, the interval given by {3, 2} represents the set [3, 4, 5].
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Interval {
     pub value: u16,
     pub length: u16,
@@ -14,7 +15,7 @@ impl Interval {
     }
 
     pub fn get_pair(&self) -> (u16, u16) {
-        return (self.value, self.value + self.length)
+        return (self.value, self.value + self.length);
     }
 
     pub fn get_end(&self) -> u16 {
@@ -24,7 +25,7 @@ impl Interval {
     /// Compares the given `key` to the interval. Note that the comparison is
     /// relative to the interval, so `Less` implies that our interval is below
     /// the key (i.e., the key is higher than the bounds of the interval).
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// let interval = Interval::from((3, 5)); // [3, 4, 5]
@@ -48,7 +49,7 @@ impl Interval {
     }
 
     /// Tries to fuse two intervals together that are separated by a single element.
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// let interval_1 = Interval::from((3, 5)); // [3, 4, 5]
@@ -59,17 +60,15 @@ impl Interval {
     /// assert_eq!(interval_1.try_fuse(&interval_3), None);
     /// ```
     pub fn try_fuse(&self, other: Option<&Interval>) -> Option<Interval> {
-        let Some(other) = other else {
-            return None
-        };
+        let Some(other) = other else { return None };
 
         let (this_start, this_end) = self.get_pair();
         let (other_start, other_end) = other.get_pair();
 
         if other_start.checked_sub(this_end) == Some(2) {
-            return Some(Interval::from((this_start, other_end)))
+            return Some(Interval::from((this_start, other_end)));
         } else if this_start.checked_sub(other_end) == Some(2) {
-            return Some(Interval::from((other_start, this_end)))
+            return Some(Interval::from((other_start, this_end)));
         }
 
         None
@@ -92,7 +91,7 @@ impl From<(u16, u16)> for Interval {
 #[cfg(test)]
 mod tests {
     use super::Interval;
-    
+
     #[test]
     fn test_compare_with_index() {
         let interval = Interval::from((10, 20));
