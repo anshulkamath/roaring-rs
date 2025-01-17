@@ -70,6 +70,76 @@ pub fn xor(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVis
     }
 }
 
+pub fn and(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVisitor) {
+    if lhs.is_full() {
+        visitor.visit_run_store(rhs);
+        return;
+    }
+
+    if rhs.is_full() {
+        visitor.visit_run_store(lhs);
+        return;
+    }
+
+    let mut prev_interval: Option<Interval> = None;
+    let mut and_append = |curr_interval: &Interval| {
+        let curr_interval = curr_interval.clone();
+
+        let Some(unwrapped_interval) = prev_interval else {
+            prev_interval = Some(curr_interval);
+            return;
+        };
+
+        // same interval, automatically append it
+        if unwrapped_interval == curr_interval {
+            visitor.visit_interval(curr_interval);
+            prev_interval = None;
+            return;
+        }
+
+        // no overlap, set previous interval to currenet
+        if unwrapped_interval.get_end() + 1 < curr_interval.value {
+            prev_interval = Some(curr_interval);
+            return;
+        }
+
+        let (prev_start, prev_end) = unwrapped_interval.get_pair();
+        let (curr_start, curr_end) = curr_interval.get_pair();
+        if prev_start == curr_start {
+            // same prefix, different suffix
+            let (min, max) = util::minmax(prev_end, curr_end);
+            visitor.visit_interval(Interval::from((prev_start, min)));
+            prev_interval = Some(Interval::from((min + 1, max)));
+        } else if curr_start < prev_start {
+            // same prefix, different suffix
+            let (min, max) = util::minmax(prev_end, curr_end);
+            visitor.visit_interval(Interval::from((curr_start, min)));
+            prev_interval = Some(Interval::from((min + 1, max)));
+        } else if prev_start <= curr_start {
+            if prev_end < curr_start {
+                // no overlap with previous interval; discard
+                prev_interval = Some(curr_interval);
+                return;
+            } else if prev_end <= curr_end {
+                // overlap suffix of left with prefix of right
+                visitor.visit_interval(Interval::from((curr_start, prev_end)));
+                prev_interval = Some(Interval::from((prev_end + 1, curr_end)));
+            } else {
+                // interval contains `other` interval, causing all of its elements
+                // to be admitted, starting the new interval from the number after
+                // the last shared number.
+                visitor.visit_interval((Interval::from((curr_start, curr_end))));
+                prev_interval = Some(Interval::from((curr_end + 1, prev_end)));
+                return;
+            }
+        } else {
+            prev_interval = Some(curr_interval);
+        }
+    };
+
+    BivariateOrderedIterator::new(lhs.vec.iter(), rhs.vec.iter()).for_each(|i| and_append(&i));
+}
+
 #[cfg(test)]
 mod tests {
     use crate::bitmap::store::rle_store;
@@ -77,8 +147,7 @@ mod tests {
     use rle_store::visitor::RunWriter;
     use rle_store::RunStore;
 
-    use super::or;
-    use super::xor;
+    use super::{and, or, xor};
 
     macro_rules! create_run_store {
         [$(($arg1:expr,$arg2:expr)),*] => {
@@ -220,5 +289,48 @@ mod tests {
             left = [(0, 12)],
             right = [(4, 12)],
         )
+    }
+
+    #[test]
+    fn test_and() {
+        // same set
+        run_commutative_binary_op_test!(
+            and,
+            expected = [(0, 10)],
+            left = [(0, 10)],
+            right = [(0, 10)],
+        );
+
+        // same prefix, different suffix
+        run_commutative_binary_op_test!(
+            and,
+            expected = [(0, 10)],
+            left = [(0, 20)],
+            right = [(0, 10)],
+        );
+
+        // disjoint sets
+        run_commutative_binary_op_test!(
+            and,
+            expected = [],
+            left = [(0, 10)],
+            right = [(11, 20)],
+        );
+
+        // subset
+        run_commutative_binary_op_test!(
+            and,
+            expected = [(0, 5), (10, 15)],
+            left = [(0, 20)],
+            right = [(0, 5), (10, 15)],
+        );
+
+        // interwoven
+        run_commutative_binary_op_test!(
+            and,
+            expected = [(2, 4), (8, 10)],
+            left = [(2, 10)],
+            right = [(0, 4), (8, 12)],
+        );
     }
 }

@@ -14,10 +14,12 @@ impl Interval {
         Interval { value, length }
     }
 
+    #[inline]
     pub fn get_pair(&self) -> (u16, u16) {
         return (self.value, self.value + self.length);
     }
 
+    #[inline]
     pub fn get_end(&self) -> u16 {
         self.value + self.length
     }
