@@ -548,6 +548,8 @@ where
 {
     iter1: Peekable<slice::Iter<'a, T>>,
     iter2: Peekable<slice::Iter<'a, T>>,
+    with_left_tail: bool,
+    with_right_tail: bool,
 }
 
 impl<'a, T> BivariateOrderedIterator<'a, T>
@@ -557,8 +559,23 @@ where
     pub fn new(
         iter1: slice::Iter<'a, T>,
         iter2: slice::Iter<'a, T>,
-    ) -> BivariateOrderedIterator<'a, T> {
-        BivariateOrderedIterator { iter1: iter1.peekable(), iter2: iter2.peekable() }
+    ) -> Self {
+        BivariateOrderedIterator {
+            iter1: iter1.peekable(),
+            iter2: iter2.peekable(),
+            with_left_tail: true,
+            with_right_tail: true,
+        }
+    }
+
+    pub fn without_left_tail(&mut self) -> &mut Self {
+        self.with_left_tail = false;
+        self
+    }
+
+    pub fn without_right_tail(&mut self) -> &mut Self {
+        self.with_right_tail = false;
+        self
     }
 }
 
@@ -573,14 +590,14 @@ where
         let interval2 = self.iter2.peek();
 
         if interval1.is_some() && interval2.is_some() {
-            if interval1.unwrap() <= interval2.unwrap() {
+            if interval1 <= interval2 {
                 return Some(self.iter1.next().unwrap().clone());
             } else {
                 return Some(self.iter2.next().unwrap().clone());
             }
-        } else if interval1.is_some() {
+        } else if self.with_left_tail && interval1.is_some() {
             return Some(self.iter1.next().unwrap().clone());
-        } else if interval2.is_some() {
+        } else if self.with_right_tail && interval2.is_some() {
             return Some(self.iter2.next().unwrap().clone());
         } else {
             None

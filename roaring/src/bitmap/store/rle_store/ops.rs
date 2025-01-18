@@ -16,7 +16,7 @@ pub fn or(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVisi
     }
 
     BivariateOrderedIterator::new(lhs.vec.iter(), rhs.vec.iter())
-        .for_each(|i| visitor.visit_interval(i));
+        .for_each(|i| visitor.visit_interval(&i));
 }
 
 pub fn xor(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVisitor) {
@@ -37,7 +37,7 @@ pub fn xor(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVis
 
         // no overlap, append previous interval
         if unwrapped_prev.get_end() + 1 < curr_interval.value {
-            visitor.visit_interval(unwrapped_prev);
+            visitor.visit_interval(&unwrapped_prev);
             prev_interval = Some(curr_interval);
             return;
         }
@@ -59,14 +59,14 @@ pub fn xor(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVis
             let left = Interval::from((prev_start, curr_start - 1));
             let right = Interval::from((min_end + 1, max_end));
 
-            visitor.visit_interval(left);
+            visitor.visit_interval(&left);
             prev_interval = Some(right);
         }
     };
 
     BivariateOrderedIterator::new(lhs.vec.iter(), rhs.vec.iter()).for_each(|i| xor_append(&i));
     if prev_interval.is_some() {
-        visitor.visit_interval(prev_interval.unwrap());
+        visitor.visit_interval(&prev_interval.unwrap());
     }
 }
 
@@ -83,15 +83,13 @@ pub fn and(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVis
 
     let mut prev_interval: Option<Interval> = None;
     let mut and_append = |curr_interval: &Interval| {
-        let curr_interval = curr_interval.clone();
-
         let Some(unwrapped_interval) = prev_interval else {
-            prev_interval = Some(curr_interval);
+            prev_interval = Some(curr_interval.clone());
             return;
         };
 
         // same interval, automatically append it
-        if unwrapped_interval == curr_interval {
+        if &unwrapped_interval == curr_interval {
             visitor.visit_interval(curr_interval);
             prev_interval = None;
             return;
@@ -99,7 +97,7 @@ pub fn and(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVis
 
         // no overlap, set previous interval to currenet
         if unwrapped_interval.get_end() + 1 < curr_interval.value {
-            prev_interval = Some(curr_interval);
+            prev_interval = Some(curr_interval.clone());
             return;
         }
 
@@ -108,36 +106,69 @@ pub fn and(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVis
         if prev_start == curr_start {
             // same prefix, different suffix
             let (min, max) = util::minmax(prev_end, curr_end);
-            visitor.visit_interval(Interval::from((prev_start, min)));
+            visitor.visit_interval(&Interval::from((prev_start, min)));
             prev_interval = Some(Interval::from((min + 1, max)));
         } else if curr_start < prev_start {
             // same prefix, different suffix
             let (min, max) = util::minmax(prev_end, curr_end);
-            visitor.visit_interval(Interval::from((curr_start, min)));
+            visitor.visit_interval(&Interval::from((curr_start, min)));
             prev_interval = Some(Interval::from((min + 1, max)));
         } else if prev_start <= curr_start {
             if prev_end < curr_start {
                 // no overlap with previous interval; discard
-                prev_interval = Some(curr_interval);
+                prev_interval = Some(curr_interval.clone());
                 return;
             } else if prev_end <= curr_end {
                 // overlap suffix of left with prefix of right
-                visitor.visit_interval(Interval::from((curr_start, prev_end)));
+                visitor.visit_interval(&Interval::from((curr_start, prev_end)));
                 prev_interval = Some(Interval::from((prev_end + 1, curr_end)));
             } else {
                 // interval contains `other` interval, causing all of its elements
                 // to be admitted, starting the new interval from the number after
                 // the last shared number.
-                visitor.visit_interval((Interval::from((curr_start, curr_end))));
+                visitor.visit_interval(&Interval::from((curr_start, curr_end)));
                 prev_interval = Some(Interval::from((curr_end + 1, prev_end)));
                 return;
             }
         } else {
-            prev_interval = Some(curr_interval);
+            prev_interval = Some(curr_interval.clone());
         }
     };
 
     BivariateOrderedIterator::new(lhs.vec.iter(), rhs.vec.iter()).for_each(|i| and_append(&i));
+}
+
+pub fn and_not(lhs: &RunStore, rhs: &RunStore, visitor: &mut impl BinaryOperationVisitor) {
+    let mut iter1 = lhs.vec.iter().peekable();
+    let mut iter2 = rhs.vec.iter().peekable();
+
+    let (mut lhs_start, mut lhs_end) = iter1.peek().map_or((0, 0), |i| i.get_pair());
+    while let (Some(_), Some(right_ival)) = (iter1.peek(), iter2.peek()) {
+        let (rhs_start, rhs_end) = right_ival.get_pair();
+
+        if lhs_end < rhs_start {
+            visitor.visit_interval(iter1.next().unwrap());
+            iter1.peek().inspect(|i| (lhs_start, lhs_end) = i.get_pair());
+        } else if rhs_end < lhs_start {
+            iter2.next();
+        } else {
+            if lhs_start < rhs_start {
+                visitor.visit_interval(&Interval::from((lhs_start, rhs_start - 1)));
+            }
+
+            if rhs_end < lhs_end {
+                lhs_start = rhs_end + 1;
+            } else {
+                iter1.next();
+                iter1.peek().inspect(|i| (lhs_start, lhs_end) = i.get_pair());
+            }
+        }
+    }
+
+    if iter1.peek().is_some() {
+        visitor.visit_interval(&Interval::from((lhs_start, lhs_end)));
+        iter1.skip(1).for_each(|i| visitor.visit_interval(i));
+    }
 }
 
 #[cfg(test)]
@@ -147,7 +178,7 @@ mod tests {
     use rle_store::visitor::RunWriter;
     use rle_store::RunStore;
 
-    use super::{and, or, xor};
+    use super::{and, and_not, or, xor};
 
     macro_rules! create_run_store {
         [$(($arg1:expr,$arg2:expr)),*] => {
@@ -157,6 +188,25 @@ mod tests {
                 ]).unwrap()
             }
         };
+    }
+
+    macro_rules! run_binary_op_test {
+        (
+            $f:ident,
+            $(expected =)? [$(($arg1:expr,$arg2:expr)),*],
+            $(left =)? [$(($arg3:expr,$arg4:expr)),*],
+            $(right =)? [$(($arg5:expr,$arg6:expr)),*]
+            $(,)?
+        ) => {{
+            let left = create_run_store![$(($arg3, $arg4)),*];
+            let right = create_run_store![$(($arg5, $arg6)),*];
+            let expected = create_run_store![$(($arg1, $arg2)),*];
+
+            let mut visitor = RunWriter::new();
+            $f(&(left.clone()), &(right.clone()), &mut visitor);
+            let got = visitor.into_inner();
+            assert_eq!(expected, got);
+        }};
     }
 
     macro_rules! run_commutative_binary_op_test {
@@ -310,12 +360,7 @@ mod tests {
         );
 
         // disjoint sets
-        run_commutative_binary_op_test!(
-            and,
-            expected = [],
-            left = [(0, 10)],
-            right = [(11, 20)],
-        );
+        run_commutative_binary_op_test!(and, expected = [], left = [(0, 10)], right = [(11, 20)],);
 
         // subset
         run_commutative_binary_op_test!(
@@ -332,5 +377,19 @@ mod tests {
             left = [(2, 10)],
             right = [(0, 4), (8, 12)],
         );
+    }
+
+    #[test]
+    fn test_and_not() {
+        // same set
+        run_binary_op_test!(and_not, expected = [], left = [(0, 5)], right = [(0, 5)]);
+
+        // disjoint sets
+        run_binary_op_test!(and_not, expected = [(0, 5)], left = [(0, 5)], right = [(6, 10)]);
+        run_binary_op_test!(and_not, expected = [(6, 10)], left = [(6, 10)], right = [(0, 5)]);
+
+        // overlapping intervals
+        run_binary_op_test!(and_not, expected = [(0, 3)], left = [(0, 6)], right = [(4, 10)]);
+        run_binary_op_test!(and_not, expected = [(7, 10)], left = [(4, 10)], right = [(0, 6)]);
     }
 }

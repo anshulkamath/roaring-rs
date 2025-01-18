@@ -14,6 +14,11 @@ impl Interval {
         Interval { value, length }
     }
 
+    /// Get the bounds of the interval, inclusive of both bounds
+    /// ```ignore
+    /// let interval = Interval::new(3, 3);  // [3, 4, 5, 6]
+    /// assert_eq!(interval.get_pair(), (3, 6));
+    /// ```
     #[inline]
     pub fn get_pair(&self) -> (u16, u16) {
         return (self.value, self.value + self.length);
